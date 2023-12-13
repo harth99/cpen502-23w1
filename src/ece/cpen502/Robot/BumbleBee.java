@@ -77,15 +77,15 @@ public class BumbleBee extends AdvancedRobot {
     // Move to State class
     public State.DistanceToWall getDistanceFromWallLevel(double x1, double y1) {
         State.DistanceToWall dist2Wall = null;
-        double width = getBattleFieldWidth();
-        double height = getBattleFieldHeight();
-        double dist = y1;
-        double disb = height - y1;
-        double disl = x1;
-        double disr = width - x1;
-        if(dist < 30 || disb < 30 || disl < 30 || disr < 30) {
+        double widthBattleField = getBattleFieldWidth();
+        double heightBattleField = getBattleFieldHeight();
+        double distanceToTopWall = y1;
+        double distanceToBottomWall = heightBattleField - y1;
+        double distanceToLeftWall = x1;
+        double distanceToRightWall = widthBattleField - x1;
+        if(distanceToTopWall < 30 || distanceToBottomWall < 30 || distanceToLeftWall < 30 || distanceToRightWall < 30) {
             dist2Wall = State.DistanceToWall.close;
-        } else if(dist < 80 || disb < 80 || disl < 80 || disr < 80) {
+        } else if(distanceToTopWall < 80 || distanceToBottomWall < 80 || distanceToLeftWall < 80 || distanceToRightWall < 80) {
             dist2Wall = State.DistanceToWall.medium;
         } else {
             dist2Wall = State.DistanceToWall.far;
@@ -94,13 +94,13 @@ public class BumbleBee extends AdvancedRobot {
     }
 
     // Move to State class
-    public State.DistanceToEnemy getDistanceToEnemy(double dist2Enemy) {
+    public State.DistanceToEnemy getDistanceToEnemy(double distanceToEnemyRobot) {
         State.DistanceToEnemy level = null;
-        if (dist2Enemy < 0) {
+        if (distanceToEnemyRobot < 0) {
             return level;
-        } else if (dist2Enemy < 300) {
+        } else if (distanceToEnemyRobot < 300) {
             level = State.DistanceToEnemy.close;
-        } else if (dist2Enemy < 600) {
+        } else if (distanceToEnemyRobot < 600) {
             level = State.DistanceToEnemy.medium;
         } else {
             level = State.DistanceToEnemy.far;

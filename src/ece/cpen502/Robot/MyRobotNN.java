@@ -1,12 +1,17 @@
 package ece.cpen502.Robot;
 
 import ece.cpen502.NN.NeuralNet;
+import ece.cpen502.ReplayMemory.Experience;
+import ece.cpen502.ReplayMemory.ReplayMemory;
 import robocode.*;
 
 import java.io.File;
+import java.util.Random;
 
 public class MyRobotNN extends AdvancedRobot {
     // Use pre-defined after-tuned hyper-parameters
+    private static final int MEMORY_CAPACITY = 10;
+    private static final boolean INTERMEDIATE_REWARD = true;
     private int numberOfHiddenNeurons = 15;
     private double momentum = 0.95;
     private double learningRate = 0.001;
@@ -15,13 +20,24 @@ public class MyRobotNN extends AdvancedRobot {
     private State currState;
     private State prevState;
     private Action currAction;
+    private Action prevAction;
+    private final double immediateBonus = 0.5;
+    private final double terminalBonus = 1.0;
+    private final double immediatePenaltyLow = -0.1;
+    private final double immediatePenaltyMedium = -0.2;
+    private final double terminalPenalty = -0.5;
     private State.OperationalMode myOperationalMode = State.OperationalMode.scan;
+    static ReplayMemory<Experience> replayMemory = new ReplayMemory<>(MEMORY_CAPACITY);
     private double reward;
     public double myX;
     public double myY;
     public double myEnergy;
     public double enemyEnergy;
     public double d2E;
+    public static int totalRound = 0;
+    public static int winRound = 0;
+    public static final double EPSILON = 0.1;
+    public static double enemyBearing;
 
 
     private NeuralNet nn;
@@ -47,16 +63,12 @@ public class MyRobotNN extends AdvancedRobot {
                     currState.setMyEnergy(getRobotTankEnergyLevel(myEnergy));
                     currState.setEnemyEnergy(getRobotTankEnergyLevel(enemyEnergy));
 
-                    currAction = nn.getNextAction(currState);
+                    if (Math.random() <= EPSILON) {
+                        currAction = Action.values()[new Random().nextInt(Action.values().length)];
+                    } else {
+                        currAction = getBestActionUsingNN(currState);
+                    }
 
-                    currActionIndex = (Math.random() <= EPSILON)
-                            ? lut.getRandomAction() // explore a random action
-                            : lut.getBestAction(
-                            getRobotTankEnergyLevel(myEnergy).ordinal(),
-                            getRobotTankEnergyLevel(enemyEnergy).ordinal(),
-                            getDistanceToEnemy(d2E).ordinal(),
-                            currD2W.ordinal());
-                    currAction = State.Action.values()[currActionIndex];
                     switch (currAction) {
                         case fire: {
                             turnGunRight(getHeading() - getGunHeading() + enemyBearing);
@@ -87,19 +99,24 @@ public class MyRobotNN extends AdvancedRobot {
                             break;
                         }
                     }
-                    int[] indexes = new int[]{
-                            myPrevEnergy.ordinal(),
-                            enemyPrevEnergy.ordinal(),
-                            prevD2E.ordinal(),
-                            prevD2W.ordinal(),
-                            prevAction.ordinal()
-                    };
-                    Q_VAL = calQ(reward, ON_POLICY);
-                    lut.setQValue(indexes, Q_VAL);
+                    updatePrevQ();
                     myOperationalMode = State.OperationalMode.scan;
                 }
             }
         }
+    }
+
+    public Action getBestActionUsingNN(State state) {
+        int actionWithMaxQEnum = 0;
+        double maxQ = 0.0;
+        for (int i = 0; i < Action.values().length; i++) {
+            double resQ = nn.getThisActionOutputNeuronActivation(state, Action.values()[i]);
+            if (resQ > maxQ) {
+                maxQ = resQ;
+                actionWithMaxQEnum = i;
+            }
+        }
+        return Action.values()[actionWithMaxQEnum];
     }
 
     public State.DistanceToWall getDistanceFromWallLevel(double x1, double y1) {
@@ -110,9 +127,9 @@ public class MyRobotNN extends AdvancedRobot {
         double distanceToBottomWall = heightBattleField - y1;
         double distanceToLeftWall = x1;
         double distanceToRightWall = widthBattleField - x1;
-        if(distanceToTopWall < 30 || distanceToBottomWall < 30 || distanceToLeftWall < 30 || distanceToRightWall < 30) {
+        if (distanceToTopWall < 30 || distanceToBottomWall < 30 || distanceToLeftWall < 30 || distanceToRightWall < 30) {
             dist2Wall = State.DistanceToWall.close;
-        } else if(distanceToTopWall < 80 || distanceToBottomWall < 80 || distanceToLeftWall < 80 || distanceToRightWall < 80) {
+        } else if (distanceToTopWall < 80 || distanceToBottomWall < 80 || distanceToLeftWall < 80 || distanceToRightWall < 80) {
             dist2Wall = State.DistanceToWall.medium;
         } else {
             dist2Wall = State.DistanceToWall.far;
@@ -138,11 +155,11 @@ public class MyRobotNN extends AdvancedRobot {
     // Move to State class
     public State.HP getRobotTankEnergyLevel(double hp) {
         State.HP level = null;
-        if(hp < 0) {
+        if (hp < 0) {
             return level;
-        } else if(hp <= 33) {
+        } else if (hp <= 33) {
             level = State.HP.low;
-        } else if(hp <= 67) {
+        } else if (hp <= 67) {
             level = State.HP.medium;
         } else {
             level = State.HP.high;
@@ -150,48 +167,31 @@ public class MyRobotNN extends AdvancedRobot {
         return level;
     }
 
-    // Compute the Q
-    public double calQ(double reward, boolean onPolicy) {
-        double previousQ = lut.getQValue(
-                myPrevEnergy.ordinal(),
-                enemyPrevEnergy.ordinal(),
-                prevD2E.ordinal(),
-                prevD2W.ordinal(),
-                prevAction.ordinal()
-        );
-
-        double currentQ = lut.getQValue(
-                myCurrEnergy.ordinal(),
-                enemyCurrEnergy.ordinal(),
-                currD2E.ordinal(),
-                currD2W.ordinal(),
-                currAction.ordinal()
-        );
-
-        int bestActionIndex = lut.getBestAction(
-                myCurrEnergy.ordinal(),
-                enemyCurrEnergy.ordinal(),
-                currD2E.ordinal(),
-                currD2W.ordinal()
-        );
-
-        // Get the maximum Q ( Off-policy )
-        double maxQ = lut.getQValue(
-                myCurrEnergy.ordinal(),
-                enemyCurrEnergy.ordinal(),
-                currD2E.ordinal(),
-                currD2W.ordinal(),
-                bestActionIndex
-        );
-
-        // onPolicy : Sarsa
-        // offPolicy : Q-Learning
-        double res = onPolicy ?
-                previousQ + LEARNING_RATE * (reward + DISCOUNT_FACTOR * currentQ - previousQ) :
-                previousQ + LEARNING_RATE * (reward + DISCOUNT_FACTOR * maxQ - previousQ);
-
-        return res;
+    public void updatePrevQ() {
+        double[] x = new double[]{
+                prevState.getMyEnergy().ordinal(),
+                prevState.getEnemyEnergy().ordinal(),
+                prevState.getDistanceToWall().ordinal(),
+                prevState.getDistanceToEnemy().ordinal(),
+        };
+        replayMemoryTrain(x);
     }
+
+    public void replayMemoryTrain(double[] x) {
+        Experience experience = new Experience(reward, currState, prevState, currAction);
+        replayMemory.add(experience);
+        if (replayMemory.sizeOf() >= MEMORY_CAPACITY) {
+            for (Object object : replayMemory.randomSample(MEMORY_CAPACITY)) {
+                Experience exp = (Experience) object;
+                nn.qTrain(exp.getReward(),
+                        exp.getCurrState(),
+                        exp.getPrevState(),
+                        exp.getPrevAction());
+            }
+        }
+    }
+
+    // Compute the Q
 
     public void onScannedRobot(ScannedRobotEvent e) {
         super.onScannedRobot(e);
@@ -203,121 +203,64 @@ public class MyRobotNN extends AdvancedRobot {
         enemyEnergy = e.getEnergy();
         d2E = e.getDistance();
 
-        myPrevEnergy = myCurrEnergy;
-        enemyPrevEnergy = enemyCurrEnergy;
-        prevD2E = currD2E;
-        prevD2W = currD2W;
         prevAction = currAction;
 
-        myCurrEnergy = getRobotTankEnergyLevel(myEnergy);
-        enemyCurrEnergy = getRobotTankEnergyLevel(enemyEnergy);
-        currD2E = getDistanceToEnemy(d2E);
-        currD2W = getDistanceFromWallLevel(myX, myY);
         myOperationalMode = State.OperationalMode.performAction;
     }
 
     @Override
-    public void onHitByBullet(HitByBulletEvent e){
-        if(INTERMEDIATE_REWARD) {
+    public void onHitByBullet(HitByBulletEvent e) {
+        if (INTERMEDIATE_REWARD) {
             reward += immediatePenaltyMedium;
         }
     }
 
     @Override
-    public void onBulletHit(BulletHitEvent e){
-        if(INTERMEDIATE_REWARD) {
+    public void onBulletHit(BulletHitEvent e) {
+        if (INTERMEDIATE_REWARD) {
             reward += immediateBonus;
         }
     }
 
     @Override
-    public void onBulletMissed(BulletMissedEvent e){
-        if(INTERMEDIATE_REWARD) {
+    public void onBulletMissed(BulletMissedEvent e) {
+        if (INTERMEDIATE_REWARD) {
             reward += immediatePenaltyLow;
         }
     }
 
     @Override
-    public void onHitWall(HitWallEvent e){
-        if(INTERMEDIATE_REWARD) {
+    public void onHitWall(HitWallEvent e) {
+        if (INTERMEDIATE_REWARD) {
             reward += immediatePenaltyLow;
         }
-        avidObstacle();
+        moveAwayWhenHit();
     }
-    public void avidObstacle() {
+
+    public void moveAwayWhenHit() {
         setBack(200);
         setTurnRight(60);
         execute();
     }
+
     @Override
     public void onHitRobot(HitRobotEvent e) {
-        if(INTERMEDIATE_REWARD) {
+        if (INTERMEDIATE_REWARD) {
             reward += immediatePenaltyLow;
         }
-        avidObstacle();
+        moveAwayWhenHit();
     }
-    @Override
-    public void onWin(WinEvent e){
 
+    @Override
+    public void onWin(WinEvent e) {
         reward = terminalBonus;
-        int[] indexes = new int []{
-                myPrevEnergy.ordinal(),
-                enemyPrevEnergy.ordinal(),
-                prevD2E.ordinal(),
-                prevD2W.ordinal(),
-                prevAction.ordinal()};
-        Q_VAL = calQ(reward, ON_POLICY);
-        lut.setQValue(indexes, Q_VAL);
-        winRound++;
         totalRound++;
-        if((totalRound % 100 == 0) && (totalRound != 0)){
-            winPercentage = (double) winRound / 100;
-            System.out.println(String.format("%d, %.3f",++round, winPercentage));
-            File folderDst1 = getDataFile(fileToSaveName);
-            log.writeToFile(folderDst1, winPercentage, round);
-            winRound = 0;
-//            saveTable();
-        }
-        if (totalRound >= 6500) {
-            saveTable();
-        }
+        winRound++;
     }
 
     @Override
-    public void onDeath(DeathEvent e){
-
+    public void onDeath(DeathEvent e) {
         reward = terminalPenalty;
-        // why int instead of double?
-        int[] indexes = new int []{
-                myPrevEnergy.ordinal(),
-                enemyPrevEnergy.ordinal(),
-                prevD2E.ordinal(),
-                prevD2W.ordinal(),
-                prevAction.ordinal()};
-        Q_VAL = calQ(reward, ON_POLICY);
-        lut.setQValue(indexes, Q_VAL);
-        /*saveTable();*/
         totalRound++;
-        if((totalRound % 100 == 0) && (totalRound != 0)){
-            winPercentage = (double) winRound / 100;
-            System.out.println(String.format("%d, %.3f",++round, winPercentage));
-            File folderDst1 = getDataFile(fileToSaveName);
-            log.writeToFile(folderDst1, winPercentage, round);
-            winRound = 0;
-//            saveTable();
-        }
-        if (totalRound >= 6500) {
-            saveTable();
-        }
-
     }
-    public void saveTable() {
-        try {
-            String file = fileToSaveLUT + "-" + round + ".log";
-            lut.save(getDataFile(file));
-        } catch (Exception e) {
-            System.out.println("Save Error!" + e);
-        }
-    }
-
 }

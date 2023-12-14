@@ -1,16 +1,28 @@
 package ece.cpen502.NN;
 
 import ece.cpen502.Interface.NeuralNetInterface;
+import ece.cpen502.Robot.Action;
+import ece.cpen502.Robot.State;
 
 import java.io.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Random;
 
 public class NeuralNet implements NeuralNetInterface {
     private static final double THRESHOLD = 0.05;
     private static final double EPOCH_THRESHOLD = 250;
+    private static double EXPLORATION_RATE = 0.2;
+    private static final double ALPHA = 0.1;
+    private static final double GAMMA = 0.9;
+    private int round = 0;
+    private double currQ = 0.0;
+    private double prevQ = 0.0;
+
+    private static final int EPOCH_STOP_EXPLORE = 6000;
     private int numInputs;
     private int numHidden;
     private int numOutput;
@@ -184,6 +196,26 @@ public class NeuralNet implements NeuralNetInterface {
         }
     }
 
+    public double getThisActionOutputNeuronActivation(State state, Action action) {
+        double[] trainingInput = new double[]{state.getMyEnergy().ordinal(), state.getEnemyEnergy().ordinal(), state.getDistanceToEnemy().ordinal(), state.getDistanceToWall().ordinal(), action.ordinal()};
+        feedForward(trainingInput);
+        return outputNeuronActivation;
+    }
+
+    public void qTrain(double reward, State currState, State prevState, Action prevAction) {
+        if (EXPLORATION_RATE > 0 && round == EPOCH_STOP_EXPLORE) {
+            EXPLORATION_RATE = 0;
+        }
+        int prevActionIndex = Action.getActionNum(prevAction);
+        double[] prevInput = new double[]{prevState.getMyEnergy().ordinal(), prevState.getEnemyEnergy().ordinal(), prevState.getDistanceToEnemy().ordinal(), prevState.getDistanceToWall().ordinal()};
+        feedForward(prevInput);
+        double[] currInput = new double[]{currState.getMyEnergy().ordinal(), currState.getEnemyEnergy().ordinal(), currState.getDistanceToEnemy().ordinal(), currState.getDistanceToWall().ordinal()};
+        feedForward(currInput);
+        double loss = ALPHA * (reward + GAMMA * currQ - prevQ);
+        double updatedQ = prevQ + loss;
+//        backProp(prevQ, updatedQ, prevActionIndex);
+    }
+
     public int TrainNN(double[][] trainingSamples, double[] targetLabel) {
         System.out.println("Start training...");
         this.totalErrorList.clear();
@@ -281,8 +313,6 @@ public class NeuralNet implements NeuralNetInterface {
             targetLabel[i] = (targetLabel[i] - minQ) * 2 / (maxQ - minQ) - 1;
         }
     }
-
-    public
 
     // Load LUT Q-values from A2
     public void loadLUTContent(double[][] trainingDataLUT, double[] targetLabel, String filePath) {

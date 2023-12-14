@@ -29,13 +29,11 @@ public class BumbleBee extends AdvancedRobot {
     public double d2E = 0.0;
     public static boolean INTERMEDIATE_REWARD = true;
     public static boolean ON_POLICY = true;
-    private final double DISCOUNT_FACTOR = 0.9;
+    private final double DISCOUNT_FACTOR = 0.2;
     private final double LEARNING_RATE = 0.01;
     private final double EPSILON = 0.1;
     private double Q_VAL = 0.0;
     private double reward = 0.0;
-
-    /* Bonus and Penalty */
     private final double immediateBonus = 0.5;
     private final double terminalBonus = 1.0;
     private final double immediatePenaltyLow = -0.1;
@@ -50,9 +48,8 @@ public class BumbleBee extends AdvancedRobot {
     public static int totalRound = 0;
     public static int round = 0;
     public static int winRound = 0;
-    public static double winPercentage = 0.0;
+    public static double winRate = 0.0;
     public static String fileToSaveName = BumbleBee.class.getSimpleName() + "-"  + "winningRate"+ ".log";
-    public static String fileToSaveLUT = BumbleBee.class.getSimpleName() + "-"  + "LUT";
     static LogFile log = new LogFile();
 
     public static LookUpTable lut = new LookUpTable(State.HP.values().length,
@@ -74,10 +71,6 @@ public class BumbleBee extends AdvancedRobot {
         prevState = new State(myPrevEnergy, enemyPrevEnergy, prevD2E, prevD2W, prevAction);
 
         while (true) {
-//            if (totalRound >= 6500) {
-//                saveTable();
-//                break;
-//            }
             switch (myOperationalMode) {
                 case scan: {
                     reward = 0.0;
@@ -285,44 +278,30 @@ public class BumbleBee extends AdvancedRobot {
         if(INTERMEDIATE_REWARD) {
             reward += immediatePenaltyLow;
         }
-        avidObstacle();
-    }
-    public void avidObstacle() {
-        setBack(200);
-        setTurnRight(60);
-        execute();
-    }
-    @Override
-    public void onHitRobot(HitRobotEvent e) {
-        if(INTERMEDIATE_REWARD) {
-            reward += immediatePenaltyLow;
-        }
-        avidObstacle();
+        moveAwayWhenHit();
     }
     @Override
     public void onWin(WinEvent e){
 
         reward = terminalBonus;
-        int[] indexes = new int []{
+        int[] indexArr = new int []{
                 myPrevEnergy.ordinal(),
                 enemyPrevEnergy.ordinal(),
                 prevD2E.ordinal(),
                 prevD2W.ordinal(),
                 prevAction.ordinal()};
         Q_VAL = calQ(reward, ON_POLICY);
-        lut.setQValue(indexes, Q_VAL);
-        winRound++;
+        lut.setQValue(indexArr, Q_VAL);
+
         totalRound++;
-        if((totalRound % 100 == 0) && (totalRound != 0)){
-            winPercentage = (double) winRound / 100;
-            System.out.println(String.format("%d, %.3f",++round, winPercentage));
+        winRound++;
+
+        if((totalRound != 0) && (totalRound % 100 == 0)){
+            winRate = (double) winRound / 100;
+            System.out.println(String.format("%d, %.3f",++round, winRate));
             File folderDst1 = getDataFile(fileToSaveName);
-            log.writeToFile(folderDst1, winPercentage, round);
+            log.writeToFile(folderDst1, winRate, round);
             winRound = 0;
-//            saveTable();
-        }
-        if (totalRound >= 6500) {
-            saveTable();
         }
     }
 
@@ -339,29 +318,38 @@ public class BumbleBee extends AdvancedRobot {
                 prevAction.ordinal()};
         Q_VAL = calQ(reward, ON_POLICY);
         lut.setQValue(indexes, Q_VAL);
-        /*saveTable();*/
         totalRound++;
         if((totalRound % 100 == 0) && (totalRound != 0)){
-            winPercentage = (double) winRound / 100;
-            System.out.println(String.format("%d, %.3f",++round, winPercentage));
+            winRate = (double) winRound / 100;
+            System.out.println(String.format("%d, %.3f",++round, winRate));
             File folderDst1 = getDataFile(fileToSaveName);
-            log.writeToFile(folderDst1, winPercentage, round);
+            log.writeToFile(folderDst1, winRate, round);
             winRound = 0;
-//            saveTable();
-        }
-        if (totalRound >= 6500) {
-            saveTable();
         }
 
     }
-    public void saveTable() {
-        try {
-            String file = fileToSaveLUT + "-" + round + ".log";
-            lut.save(getDataFile(file));
-        } catch (Exception e) {
-            System.out.println("Save Error!" + e);
-        }
+
+    public void moveAwayWhenHit() {
+        setBack(200);
+        setTurnRight(60);
+        execute();
     }
+    @Override
+    public void onHitRobot(HitRobotEvent e) {
+        if(INTERMEDIATE_REWARD) {
+            reward += immediatePenaltyLow;
+        }
+        moveAwayWhenHit();
+    }
+
+//    public void saveTable() {
+//        try {
+//            String file = fileToSaveLUT + "-" + round + ".log";
+//            lut.save(getDataFile(file));
+//        } catch (Exception e) {
+//            System.out.println("Save Error!" + e);
+//        }
+//    }
 
 //    public void loadTable() {
 //        try {

@@ -22,24 +22,36 @@ public class State {
 
     ;
 
-    private HP hp;
+    private HP myEnergy;
+    private HP enemyEnergy;
     private DistanceToEnemy distanceToEnemy;
     private DistanceToWall distanceToWall;
     private Action action;
     private OperationalMode operationalMode;
 
     // Constructor
-    public State(HP hp, DistanceToEnemy distanceToEnemy, DistanceToWall distanceToWall, Action action, OperationalMode operationalMode) {
-        this.hp = hp;
+    public State(HP myEnergy, HP enemyEnergy, DistanceToEnemy distanceToEnemy, DistanceToWall distanceToWall, Action action) {
+        this.myEnergy = myEnergy;
+        this.enemyEnergy = enemyEnergy;
         this.distanceToEnemy = distanceToEnemy;
         this.distanceToWall = distanceToWall;
         this.action = action;
-        this.operationalMode = operationalMode;
+    }
+
+    public State(HP myEnergy, HP enemyEnergy, DistanceToEnemy distanceToEnemy, DistanceToWall distanceToWall) {
+        this.myEnergy = myEnergy;
+        this.enemyEnergy = enemyEnergy;
+        this.distanceToEnemy = distanceToEnemy;
+        this.distanceToWall = distanceToWall;
     }
 
     // Getters
-    public HP getHp() {
-        return hp;
+    public HP getMyEnergy() {
+        return myEnergy;
+    }
+
+    public HP getEnemyEnergy() {
+        return enemyEnergy;
     }
 
     public DistanceToEnemy getDistanceToEnemy() {
@@ -54,13 +66,13 @@ public class State {
         return action;
     }
 
-    public OperationalMode getOperationalMode() {
-        return operationalMode;
+    // Setters
+    public void setMyEnergy(HP myEnergy) {
+        this.myEnergy = myEnergy;
     }
 
-    // Setters
-    public void setHp(HP hp) {
-        this.hp = hp;
+    public void setEnemyEnergy(HP enemyEnergy) {
+        this.enemyEnergy = enemyEnergy;
     }
 
     public void setDistanceToEnemy(DistanceToEnemy distanceToEnemy) {
@@ -73,10 +85,6 @@ public class State {
 
     public void setAction(Action action) {
         this.action = action;
-    }
-
-    public void setOperationalMode(OperationalMode operationalMode) {
-        this.operationalMode = operationalMode;
     }
 
 }

@@ -8,6 +8,8 @@ import java.io.File;
 
 
 public class BumbleBee extends AdvancedRobot {
+    private State currState;
+    private State prevState;
     private State.HP myCurrEnergy = State.HP.high;
     private State.HP enemyCurrEnergy = State.HP.high;
     private State.DistanceToEnemy currD2E = State.DistanceToEnemy.close;
@@ -58,6 +60,88 @@ public class BumbleBee extends AdvancedRobot {
             State.DistanceToEnemy.values().length,
             State.DistanceToWall.values().length,
             State.Action.values().length);
+
+
+    @Override
+    public void run() {
+        super.run();
+        setBulletColor(Color.red);
+        setGunColor(Color.darkGray);
+        setBodyColor(Color.blue);
+        setRadarColor(Color.white);
+
+        currState = new State(myCurrEnergy, enemyCurrEnergy, currD2E, currD2W, currAction);
+        prevState = new State(myPrevEnergy, enemyPrevEnergy, prevD2E, prevD2W, prevAction);
+
+        while (true) {
+//            if (totalRound >= 6500) {
+//                saveTable();
+//                break;
+//            }
+            switch (myOperationalMode) {
+                case scan: {
+                    reward = 0.0;
+                    turnRadarLeft(90);
+                    break;
+                }
+                case performAction: {
+                    currD2W = getDistanceFromWallLevel(myX, myY);
+
+                    currActionIndex = (Math.random() <= EPSILON)
+                            ? lut.getRandomAction() // explore a random action
+                            : lut.getBestAction(
+                            getRobotTankEnergyLevel(myEnergy).ordinal(),
+                            getRobotTankEnergyLevel(enemyEnergy).ordinal(),
+                            getDistanceToEnemy(d2E).ordinal(),
+                            currD2W.ordinal());
+                    currAction = State.Action.values()[currActionIndex];
+                    switch (currAction) {
+                        case fire: {
+                            turnGunRight(getHeading() - getGunHeading() + enemyBearing);
+                            fire(3);
+                            break;
+                        }
+
+                        case left: {
+                            setTurnLeft(30);
+                            execute();
+                            break;
+                        }
+
+                        case right: {
+                            setTurnRight(30);
+                            execute();
+                            break;
+                        }
+
+                        case forward: {
+                            setAhead(100);
+                            execute();
+                            break;
+                        }
+                        case backward: {
+                            setBack(100);
+                            execute();
+                            break;
+                        }
+                    }
+                    int[] indexes = new int[]{
+                            myPrevEnergy.ordinal(),
+                            enemyPrevEnergy.ordinal(),
+                            prevD2E.ordinal(),
+                            prevD2W.ordinal(),
+                            prevAction.ordinal()
+                    };
+                    Q_VAL = calQ(reward, ON_POLICY);
+                    lut.setQValue(indexes, Q_VAL);
+                    myOperationalMode = State.OperationalMode.scan;
+                }
+            }
+        }
+    }
+
+
+
 
     // Move to State class
     public State.HP getRobotTankEnergyLevel(double hp) {
@@ -149,85 +233,6 @@ public class BumbleBee extends AdvancedRobot {
                 previousQ + LEARNING_RATE * (reward + DISCOUNT_FACTOR * maxQ - previousQ);
 
         return res;
-    }
-    @Override
-    public void run() {
-        super.run();
-        /* Customize the robot tank */
-        setBulletColor(Color.red);
-        setGunColor(Color.darkGray);
-        setBodyColor(Color.blue);
-        setRadarColor(Color.white);
-        myCurrEnergy = State.HP.high;
-        while (true) {
-            if (totalRound >= 6500) {
-                saveTable();
-                break;
-            }
-            switch (myOperationalMode) {
-                case scan: {
-                    reward = 0.0;
-                    turnRadarLeft(90);
-                    break;
-                }
-                case performAction: {
-                    currD2W = getDistanceFromWallLevel(myX, myY);
-
-                    currActionIndex = (Math.random() <= EPSILON)
-                            ? lut.getRandomAction() // explore a random action
-                            : lut.getBestAction(
-                            getRobotTankEnergyLevel(myEnergy).ordinal(),
-                            getRobotTankEnergyLevel(enemyEnergy).ordinal(),
-                            getDistanceToEnemy(d2E).ordinal(),
-                            currD2W.ordinal()); // select greedy action
-
-//                     System.out.println(curActionIndex);
-                    currAction = State.Action.values()[currActionIndex];
-//                    turnLeft(90);
-                    switch (currAction) {
-                        case fire: {
-                            turnGunRight(getHeading() - getGunHeading() + enemyBearing);
-                            fire(3);
-                            break;
-                        }
-
-                        case left: {
-                            setTurnLeft(30);
-                            execute();
-                            break;
-                        }
-
-                        case right: {
-                            setTurnRight(30);
-                            execute();
-                            break;
-                        }
-
-                        case forward: {
-                            setAhead(100);
-                            execute();
-                            break;
-                        }
-                        case backward: {
-                            setBack(100);
-                            execute();
-                            break;
-                        }
-                    }
-                    int[] indexes = new int[]{
-                            myPrevEnergy.ordinal(),
-                            enemyPrevEnergy.ordinal(),
-                            prevD2E.ordinal(),
-                            prevD2W.ordinal(),
-                            prevAction.ordinal()
-                    };
-                    Q_VAL = calQ(reward, ON_POLICY);
-                    lut.setQValue(indexes, Q_VAL);
-                    myOperationalMode = State.OperationalMode.scan;
-                }
-
-            }
-        }
     }
 
     @Override
